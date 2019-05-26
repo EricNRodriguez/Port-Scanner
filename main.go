@@ -61,7 +61,7 @@ func (p *PortScanner) printFormattedData(openPorts []int) {
 	return
 }
 
-func processLimit() int64 {
+func ProcessLimit() int64 {
 	out, _ := exec.Command("ulimit", "-u").CombinedOutput()
 	num, _ := strconv.Atoi(strings.TrimSpace(string(out)))
 	return int64(num)
@@ -79,7 +79,7 @@ func main() {
 	scanner := &PortScanner{
 		*ip,
 		time.Duration(*timeOut),
-		make(chan int, processLimit()),
+		make(chan int, ProcessLimit()),
 	}
 	scanner.Start(*start, *end)
 }
