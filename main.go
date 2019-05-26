@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"net"
 	"os/exec"
@@ -68,13 +69,18 @@ func processLimit() int64 {
 
 
 func main() {
+	var (
+		ip 		= flag.String("ip", "127.0.0.1", "ip address")
+		timeOut = flag.Int("t", 1000, "tcp dial timeout (milliseconds)")
+		start 	= flag.Int("s", 0, "port scan range lower bound (inclusive)")
+		end 	= flag.Int("e", 65535, "port scan range upper bound (exclusive)")
+	)
+	flag.Parse()
 	scanner := &PortScanner{
-		"127.0.0.1",
-		2000,
+		*ip,
+		time.Duration(*timeOut),
 		make(chan int, processLimit()),
 	}
-	scanner.Start(0, 10202)
-
-	return
+	scanner.Start(*start, *end)
 }
 
