@@ -1,55 +1,80 @@
 package main
 
 import (
-	"golang.org/x/sync/semaphore"
+	"bytes"
+	"fmt"
 	"net"
-	"time"
-
-	//"net"
 	"os/exec"
 	"strconv"
 	"strings"
-	//"time"
+	"sync"
+	"time"
 )
 
-type PortNumbers []uint
-
 type PortScanner struct {
-	IP string
-	sem *semaphore.Weighted
-
+	ip 			string
+	timeOut 	time.Duration
+	sem chan 	int
 }
 
-func (p *PortScanner) Scan(s, e int) (openPorts []int, err error) {
-	if p.sem == nil {
-		p.sem = semaphore.NewWeighted(1)
-	}
+func (p *PortScanner) Start(s, e int) (openPorts []int, err error) {
+	openPortsChan := make(chan int)
+	wg := &sync.WaitGroup{}
+	go func() {
+		for {
+			openPorts = append(openPorts, <- openPortsChan)
+		}
+	}()
 	for i := s; i < e; i++ {
-		p.sem.Acquire(nil, 1)
-		go func(port int) {
-			conn, _ := net.DialTimeout(p.IP, strconv.Itoa(port), 500*time.Millisecond)
-			defer p.sem.Release(1)
-			if conn != nil {
-				defer conn.Close()
-			}
-			return
-		}(i)
+		p.sem <- 1
+		wg.Add(1)
+		go p.scanPort(i, openPortsChan)
+		<- p.sem
+		wg.Done()
+	}
+	wg.Wait()
+	p.printFormattedData(openPorts)
+	return
+}
+
+func (p *PortScanner) scanPort(port int, open chan <- int) {
+	if conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", p.ip, strconv.Itoa(port)), p.timeOut*time.Millisecond); err != nil {
+		if strings.Contains(err.Error(), "too many open files") {
+			time.Sleep(p.timeOut * time.Millisecond)
+			p.scanPort(port, open)
+		}
+	} else {
+		conn.Close()
+		open <- port
 	}
 	return
 }
 
-func (p *PortScanner) SetProcessLimit() {
+func (p *PortScanner) printFormattedData(openPorts []int) {
+	output := bytes.Buffer{}
+	output.WriteString(fmt.Sprintf("OPEN PORTS - %s \n-----------------------\n", p.ip))
+	for _, p := range openPorts {
+		output.WriteString(fmt.Sprintf(" + %d \n", p))
+	}
+	fmt.Println(output.String())
+	return
+}
+
+func processLimit() int64 {
 	out, _ := exec.Command("ulimit", "-u").CombinedOutput()
 	num, _ := strconv.Atoi(strings.TrimSpace(string(out)))
-	p.sem = semaphore.NewWeighted(int64(num))
-	return
+	return int64(num)
 }
 
 
 func main() {
-	sem := new(PortScanner)
-	sem.SetProcessLimit()
-	sem.Scan(0, 10)
+	scanner := &PortScanner{
+		"127.0.0.1",
+		2000,
+		make(chan int, processLimit()),
+	}
+	scanner.Start(0, 10202)
+
 	return
 }
 
