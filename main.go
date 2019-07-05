@@ -29,31 +29,32 @@ func (p *PortScanner) Start(s, e int) (openPorts []int, err error) {
 	for i := s; i < e; i++ {
 		p.sem <- 1
 		wg.Add(1)
-		go p.scanPort(i, openPortsChan)
+		go p.scanPort(i, openPortsChan, wg)
 		<- p.sem
-		wg.Done()
 	}
 	wg.Wait()
 	p.printFormattedData(openPorts)
 	return
 }
 
-func (p *PortScanner) scanPort(port int, open chan <- int) {
+func (p *PortScanner) scanPort(port int, open chan <- int, wg *sync.WaitGroup) {
 	if conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", p.ip, strconv.Itoa(port)), p.timeOut*time.Millisecond); err != nil {
 		if strings.Contains(err.Error(), "too many open files") {
 			time.Sleep(p.timeOut * time.Millisecond)
-			p.scanPort(port, open)
+			p.scanPort(port, open, wg)
+			return
 		}
 	} else {
 		conn.Close()
 		open <- port
 	}
+	wg.Done()
 	return
 }
 
 func (p *PortScanner) printFormattedData(openPorts []int) {
 	output := bytes.Buffer{}
-	output.WriteString(fmt.Sprintf("OPEN PORTS - %s \n-----------------------\n", p.ip))
+	output.WriteString(fmt.Sprintf("OPEN TCP PORTS - %s \n-----------------------\n", p.ip))
 	for _, p := range openPorts {
 		output.WriteString(fmt.Sprintf(" + %d \n", p))
 	}
